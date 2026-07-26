@@ -27,6 +27,8 @@ suportado) ou `desk.ticket.create` (handoff para atendimento humano).
 """
 
 import json
+import os
+import socket
 
 from main import gerar_resposta
 from src.infra.agent_api.client import choose_handoff_queue, generate_free_error_message, get_service_island_queues
@@ -40,6 +42,11 @@ from src.services.queue.publisher import (
 AGENT_NAME = "axel"
 QUEUE = f"task.agent.{AGENT_NAME}.create"
 DLQ = f"{QUEUE}.dlq"
+
+# Identifica qual processo físico atendeu cada mensagem — usado pra investigar
+# se existe mais de um consumidor (ex.: container órfão) disputando a mesma
+# fila em produção (RabbitMQ é compartilhado entre dev e prod).
+INSTANCE_ID = f"{socket.gethostname()}:{os.getpid()}"
 
 
 def _base_outbound_payload(payload: dict) -> dict:
@@ -101,9 +108,14 @@ def _on_message(channel, method, properties, body):
         target = payload.get("target") or {}
         messaging_session = payload.get("messagingSession") or {}
 
+        print(
+            f"[{AGENT_NAME}] instance={INSTANCE_ID} recebida mensagem "
+            f"session={messaging_session.get('id')} messages={messages!r}"
+        )
+
         non_text = [m for m in messages if m.get("type") != "TEXT"]
         if non_text or not messages:
-            print(f"[{AGENT_NAME}] Formato não suportado — messages={messages!r}")
+            print(f"[{AGENT_NAME}] instance={INSTANCE_ID} Formato não suportado — messages={messages!r}")
             _handle_unsupported_format(channel, payload, agent)
             channel.basic_ack(delivery_tag=method.delivery_tag)
             return
@@ -165,5 +177,5 @@ def start_consumer() -> None:
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(queue=QUEUE, on_message_callback=_on_message)
 
-    print(f"Aguardando mensagens na fila {QUEUE}")
+    print(f"[{AGENT_NAME}] instance={INSTANCE_ID} aguardando mensagens na fila {QUEUE}")
     channel.start_consuming()

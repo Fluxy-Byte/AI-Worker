@@ -101,7 +101,7 @@ def _on_message(channel, method, properties, body):
         target = payload.get("target") or {}
         messaging_session = payload.get("messagingSession") or {}
 
-        non_text = [m for m in messages if m.get("type") != "text"]
+        non_text = [m for m in messages if m.get("type") != "TEXT"]
         if non_text or not messages:
             _handle_unsupported_format(channel, payload, agent)
             channel.basic_ack(delivery_tag=method.delivery_tag)

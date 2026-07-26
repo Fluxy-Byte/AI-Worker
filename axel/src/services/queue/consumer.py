@@ -113,7 +113,7 @@ def _on_message(channel, method, properties, body):
             f"session={messaging_session.get('id')} messages={messages!r}"
         )
 
-        non_text = [m for m in messages if m.get("type") != "TEXT"]
+        non_text = [m for m in messages if (m.get("type") or "").upper() != "TEXT"]
         if non_text or not messages:
             print(f"[{AGENT_NAME}] instance={INSTANCE_ID} Formato não suportado — messages={messages!r}")
             _handle_unsupported_format(channel, payload, agent)

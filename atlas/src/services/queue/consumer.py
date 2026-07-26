@@ -101,6 +101,7 @@ def _on_message(channel, method, properties, body):
 
         non_text = [m for m in messages if m.get("type") != "TEXT"]
         if non_text or not messages:
+            print(f"[{AGENT_NAME}] Formato não suportado — messages={messages!r}")
             _handle_unsupported_format(channel, payload, agent_info)
             channel.basic_ack(delivery_tag=method.delivery_tag)
             return

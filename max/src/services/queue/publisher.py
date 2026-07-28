@@ -26,7 +26,13 @@ def _publish(channel, queue: str, payload: dict) -> None:
         properties=pika.BasicProperties(delivery_mode=2),
     )
 
-    print(f"Publicou na fila {queue}")
+    target = payload.get("target") or {}
+    session = payload.get("messagingSession") or {}
+    answer_preview = ((payload.get("answer") or {}).get("text") or "")[:150]
+    print(
+        f"[max] [session={session.get('id')} wa={target.get('waId')}] "
+        f"PUBLICOU em {queue}: answer='{answer_preview}'"
+    )
 
 
 def publish_outbound_message(channel, payload: dict) -> None:

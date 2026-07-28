@@ -33,21 +33,30 @@ async def _abrir_sessao(session_service, user_id: str, session_id: str) -> None:
     24h do produto."""
     sessao = await session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
     if sessao is not None:
+        print(f"[max] [session={session_id} user={user_id}] sessao ADK existente reutilizada")
         return
 
     try:
         await session_service.create_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
+        print(f"[max] [session={session_id} user={user_id}] sessao ADK nova criada")
     except AlreadyExistsError:
-        pass
+        print(f"[max] [session={session_id} user={user_id}] sessao ADK ja existia (race no create)")
 
 
 async def _executar(pergunta: str, user_id: str, session_id: str, agent_config: dict, target_info: dict) -> ResultadoResposta:
     # session_service (e o pool asyncpg por trás dele) é criado e descartado
     # dentro do mesmo event loop desta chamada — cada mensagem roda num
     # asyncio.run() próprio, e um pool asyncpg não sobrevive entre loops.
+    print(f"[max] [session={session_id} user={user_id}] _executar: abrindo session_service")
     async with get_session_service() as session_service:
         await _abrir_sessao(session_service, user_id, session_id)
 
+        rag_enabled = bool(agent_config.get("ragEnabled"))
+        print(
+            f"[max] [session={session_id} user={user_id}] montando agent "
+            f"'{agent_config.get('name')}' ragEnabled={rag_enabled} "
+            f"personality_len={len((agent_config.get('personality') or ''))}"
+        )
         agent = build_agent(agent_config, target_info)
         runner = Runner(agent=agent, app_name=APP_NAME, session_service=session_service)
         mensagem = types.Content(role="user", parts=[types.Part(text=pergunta)])
@@ -55,8 +64,17 @@ async def _executar(pergunta: str, user_id: str, session_id: str, agent_config: 
         resposta_final = ""
 
         async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=mensagem):
+            calls = event.get_function_calls() if hasattr(event, "get_function_calls") else []
+            if calls:
+                nomes = [c.name for c in calls]
+                print(f"[max] [session={session_id} user={user_id}] tool call: {nomes}")
             if event.is_final_response() and event.content and event.content.parts:
                 resposta_final = event.content.parts[0].text or resposta_final
+
+        print(
+            f"[max] [session={session_id} user={user_id}] loop do runner terminou, "
+            f"resposta_final='{resposta_final[:200]}'"
+        )
 
         sessao_final = await session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
 
@@ -70,6 +88,11 @@ async def _executar(pergunta: str, user_id: str, session_id: str, agent_config: 
             handoff_reason = sessao_final.state.get("handoff_reason")
             handoff_suggested_queue = sessao_final.state.get("handoff_suggested_queue")
             closing_requested = bool(sessao_final.state.get("closing_requested"))
+
+            print(
+                f"[max] [session={session_id} user={user_id}] state final: "
+                f"handoff={handoff_requested} closing={closing_requested}"
+            )
 
             if closing_requested and agent_config.get("closingEnabled") and agent_config.get("closingMessage"):
                 # Mensagem de finalização ativada: sobrepõe o texto gerado pela
@@ -92,6 +115,9 @@ async def _executar(pergunta: str, user_id: str, session_id: str, agent_config: 
         # atendimento de IA, não só uma resposta qualquer.
         if handoff_requested or closing_requested:
             await session_service.delete_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
+            print(f"[max] [session={session_id} user={user_id}] sessao ADK apagada (handoff/closing)")
+
+        print(f"[max] [session={session_id} user={user_id}] _executar retornando")
 
         return ResultadoResposta(
             texto=resposta_final,

@@ -37,7 +37,7 @@ COPY . .
 EXPOSE 7083
 
 # worker.py sobe o HTTP (healthcheck + POST /rag/ingest, porta PORT) e consome
-# a fila genérica task.agent.generic.create no RabbitMQ (qualquer agente que
-# não seja atlas/axel), publicando em outbound.message.send ou
-# desk.ticket.create.
+# a fila do agente definido pela env AGENT_NAME (task.agent.<nome>.create) —
+# uma instância desta imagem atende UM agente só, publicando em
+# outbound.message.send ou desk.ticket.create.
 CMD ["python", "worker.py"]

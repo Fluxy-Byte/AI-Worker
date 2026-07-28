@@ -1,9 +1,12 @@
 """
-Consumidor da fila genérica (`task.agent.generic.create`) — atende QUALQUER
-Agent que não seja atlas/axel (os dois únicos com persona fixa em código),
-não importa o nome nem a organização. Ver
+Consumidor de UMA fila dedicada por agente (`task.agent.<nome>.create`) —
+cada instância implantada deste worker atende um único Agent, escolhido pela
+env `AGENT_NAME` (mesmo valor do `Agent.name` cadastrado no Agent Console).
+O código continua genérico (personalidade/RAG vêm sempre frescos do payload,
+nada fixo aqui) — só a fila que essa instância consome é fixa. Ver
 Inbound-Service/src/infrastructure/queue/rabbitmq/publisher.ts
-(resolveAgentQueueName) pra onde essa regra é decidida.
+(resolveAgentQueueName) pra a sanitização do nome, que precisa bater com a
+usada aqui (`_sanitize_agent_name`).
 
 Contrato do payload (publicado pelo Inbound-Service, já deduplicado e
 agrupado/debounced por sessão em janelas de 10s):
@@ -30,6 +33,8 @@ suportado) ou `desk.ticket.create` (handoff para atendimento humano).
 """
 
 import json
+import os
+import re
 import traceback
 
 from main import gerar_resposta
@@ -41,7 +46,22 @@ from src.services.queue.publisher import (
     publish_outbound_message,
 )
 
-AGENT_NAME = "generic"
+
+def _sanitize_agent_name(name: str) -> str:
+    """Espelha resolveAgentQueueName do Inbound-Service (minúsculas, sem
+    acento/pontuação/espaço) — tem que bater exatamente, senão a fila que
+    este worker declara diverge da que o Inbound-Service publica."""
+    return re.sub(r"[^a-z0-9]+", "", name.strip().lower())
+
+
+_RAW_AGENT_NAME = os.getenv("AGENT_NAME")
+if not _RAW_AGENT_NAME:
+    raise RuntimeError(
+        "AGENT_NAME não definida — cada instância do worker max atende um único "
+        "agente e precisa saber qual (mesmo nome cadastrado no Agent Console)."
+    )
+
+AGENT_NAME = _sanitize_agent_name(_RAW_AGENT_NAME)
 QUEUE = f"task.agent.{AGENT_NAME}.create"
 DLQ = f"{QUEUE}.dlq"
 

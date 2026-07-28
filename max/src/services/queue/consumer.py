@@ -75,7 +75,7 @@ def _handle_generation_error(channel, payload: dict, agent: dict, error: Excepti
     publish_outbound_message(channel, outbound)
 
 
-def _handle_handoff(channel, payload: dict, agent: dict, reason: str | None) -> None:
+def _handle_handoff(channel, payload: dict, agent: dict, reason: str | None, suggested_queue: str | None = None) -> None:
     whatsapp_channel = payload.get("whatsappChannel") or {}
     service_island_id = whatsapp_channel.get("serviceIslandId")
 
@@ -86,7 +86,7 @@ def _handle_handoff(channel, payload: dict, agent: dict, reason: str | None) -> 
         except Exception as e:
             print(f"[max] Falha ao buscar filas da ilha {service_island_id}: {e}")
 
-    queue_id = choose_handoff_queue(queues, reason or "", agent.get("defaultQueueId"))
+    queue_id = choose_handoff_queue(queues, reason or "", agent.get("defaultQueueId"), suggested_queue)
 
     desk_payload = _base_outbound_payload(payload)
     desk_payload["agent"] = {"id": agent.get("id"), "name": agent.get("name")}
@@ -122,7 +122,7 @@ def _on_message(channel, method, properties, body):
             return
 
         if resultado.handoff_requested:
-            _handle_handoff(channel, payload, agent, resultado.handoff_reason)
+            _handle_handoff(channel, payload, agent, resultado.handoff_reason, resultado.handoff_suggested_queue)
             channel.basic_ack(delivery_tag=method.delivery_tag)
             return
 

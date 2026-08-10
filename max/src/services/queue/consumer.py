@@ -170,7 +170,7 @@ def _on_message(channel, method, properties, body):
         _log(
             payload,
             f"ADK respondeu: handoff={resultado.handoff_requested} "
-            f"texto='{(resultado.texto or '')[:200]}'",
+            f"partes={len(resultado.partes)}",
         )
 
         if resultado.handoff_requested:
@@ -179,10 +179,18 @@ def _on_message(channel, method, properties, body):
             _log(payload, "ACK (handoff)")
             return
 
-        outbound = _base_outbound_payload(payload)
-        outbound["answer"] = {"text": resultado.texto or "", "audio": "", "image": ""}
-        outbound["finishesProcessing"] = True
-        publish_outbound_message(channel, outbound)
+        # Uma tarefa de envio por parte — quando o agente responde com mais de uma (ex:
+        # texto + fotos dos imóveis), cada uma vira uma bolha separada no WhatsApp. A
+        # sessão só é liberada (finishesProcessing) na última.
+        for idx, parte in enumerate(resultado.partes):
+            outbound = _base_outbound_payload(payload)
+            outbound["answer"] = {
+                "text": parte.get("texto") or "",
+                "audio": "",
+                "image": parte.get("imagem_url") or "",
+            }
+            outbound["finishesProcessing"] = idx == len(resultado.partes) - 1
+            publish_outbound_message(channel, outbound)
 
         channel.basic_ack(delivery_tag=method.delivery_tag)
         _log(payload, "ACK (resposta normal publicada em outbound.message.send)")

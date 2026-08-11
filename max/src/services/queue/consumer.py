@@ -184,11 +184,15 @@ def _on_message(channel, method, properties, body):
         # sessão só é liberada (finishesProcessing) na última.
         for idx, parte in enumerate(resultado.partes):
             outbound = _base_outbound_payload(payload)
-            outbound["answer"] = {
-                "text": parte.get("texto") or "",
-                "audio": "",
-                "image": parte.get("imagem_url") or "",
-            }
+            imagem_url = parte.get("imagem_url")
+            outbound["answer"] = {"text": parte.get("texto") or "", "audio": "", "image": ""}
+            if imagem_url:
+                # O Outbound-Worker só manda mídia quando lê messageType/mediaUrl no
+                # nível raiz do payload — answer.image existe no contrato mas NUNCA é
+                # lido lá (só serve pro repasse de anexo do atendente, via Desk-Worker).
+                # Sem isso aqui a foto simplesmente não sai, mesmo com a URL certa.
+                outbound["messageType"] = "IMAGE"
+                outbound["mediaUrl"] = imagem_url
             outbound["finishesProcessing"] = idx == len(resultado.partes) - 1
             publish_outbound_message(channel, outbound)
 

@@ -32,6 +32,7 @@ def find_user_by_phone(phone: str) -> dict | None:
     """Resolve qual conta Fluxy Gestão é dona deste número de WhatsApp — é a
     ÚNICA chave usada para autorizar acesso a clientes/OS/serviços de uma
     conta (nunca um id informado pelo próprio contato)."""
+    print(f"[fly] GET /users/by-phone -> phone={phone}")
     return _get("/users/by-phone", params={"phone": phone})
 
 

@@ -1,0 +1,10 @@
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.env
+.git
+README.md
+
+# Adaptador da dev UI do ADK (adk web) — não vai pra imagem.
+dev/

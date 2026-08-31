@@ -76,7 +76,9 @@ def run_ingestion(payload: dict) -> None:
             for _ in chunks
         ]
 
-        get_vector_store().add_texts(texts=chunks, metadatas=metadatas)
+        # openaiToken vem decifrado do Agent-Api (token deste agente
+        # especificamente) — None cai no fallback do env em get_embeddings.
+        get_vector_store(api_key=payload.get("openaiToken")).add_texts(texts=chunks, metadatas=metadatas)
 
         update_rag_document_status(rag_document_id, "READY", chunk_count=len(chunks))
         print(f"[max] Ingestão concluída: ragDocumentId={rag_document_id} chunks={len(chunks)}")

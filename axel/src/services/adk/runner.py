@@ -107,4 +107,13 @@ async def _executar(pergunta: str, user_id: str, session_id: str, agent_config: 
 
 
 def gerar_resposta_adk(pergunta: str, user_id: str, session_id: str, agent_config: dict) -> ResultadoResposta:
+    # O SDK google-adk/google-genai lê GOOGLE_API_KEY do processo sozinho (não
+    # existe parâmetro explícito pra passar a key na hora de montar o Agent) —
+    # sobrescrever aqui é seguro porque este worker processa 1 mensagem por
+    # vez (prefetch_count=1, consumer síncrono) e atende sempre o MESMO agente
+    # por processo, então o valor nunca varia entre mensagens concorrentes.
+    # Token ausente/vazio no payload = não mexe no que já está no env.
+    if agent_config.get("geminiToken"):
+        os.environ["GOOGLE_API_KEY"] = agent_config["geminiToken"]
+
     return asyncio.run(_executar(pergunta, user_id, session_id, agent_config))

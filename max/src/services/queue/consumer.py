@@ -99,7 +99,7 @@ def _handle_generation_error(channel, payload: dict, agent: dict, error: Excepti
     if agent.get("errorEnabled") and agent.get("errorMessage"):
         text = agent["errorMessage"]
     else:
-        text = generate_free_error_message(agent.get("name", "Assistente"))
+        text = generate_free_error_message(agent.get("name", "Assistente"), openai_api_key=agent.get("openaiToken"))
 
     outbound = _base_outbound_payload(payload)
     outbound["answer"] = {"text": text, "audio": "", "image": ""}
@@ -119,7 +119,9 @@ def _handle_handoff(channel, payload: dict, agent: dict, reason: str | None, sug
         except Exception as e:
             _log(payload, f"Falha ao buscar filas da ilha {service_island_id}: {e}")
 
-    queue_id = choose_handoff_queue(queues, reason or "", agent.get("defaultQueueId"), suggested_queue)
+    queue_id = choose_handoff_queue(
+        queues, reason or "", agent.get("defaultQueueId"), suggested_queue, openai_api_key=agent.get("openaiToken")
+    )
     _log(payload, f"handoff -> desk.ticket.create, queueId={queue_id}")
 
     desk_payload = _base_outbound_payload(payload)

@@ -7,14 +7,18 @@ from openai import OpenAI
 BASE_URL = os.getenv("AGENT_API_BASE_URL", "http://localhost:7073")
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 
-_openai_client: OpenAI | None = None
+# Cacheado por api_key (não um singleton fixo) — cada instância deste worker
+# atende só um agente, então normalmente há só 1 entrada, mas cachear por key
+# evita reconstruir o client à toa e permite que o token venha do payload de
+# cada mensagem (Agent Console, criptografado no banco) em vez de fixo no env.
+_openai_clients: dict[str | None, OpenAI] = {}
 
 
-def _get_openai_client() -> OpenAI:
-    global _openai_client
-    if _openai_client is None:
-        _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    return _openai_client
+def _get_openai_client(api_key: str | None = None) -> OpenAI:
+    key = api_key or os.getenv("OPENAI_API_KEY")
+    if key not in _openai_clients:
+        _openai_clients[key] = OpenAI(api_key=key)
+    return _openai_clients[key]
 
 
 def get_service_island_queues(service_island_id: str) -> list[dict]:
@@ -29,7 +33,9 @@ def get_service_island_queues(service_island_id: str) -> list[dict]:
     return response.json().get("result", [])
 
 
-def choose_handoff_queue(queues: list[dict], reason: str, default_queue_id: str | None) -> str | None:
+def choose_handoff_queue(
+    queues: list[dict], reason: str, default_queue_id: str | None, openai_api_key: str | None = None
+) -> str | None:
     """Decide para qual fila da ilha o ticket de handoff deve ir, dado o motivo
     do transbordo. Cai para a fila padrão do agente (ou a primeira disponível)
     se não conseguir decidir com segurança."""
@@ -42,7 +48,7 @@ def choose_handoff_queue(queues: list[dict], reason: str, default_queue_id: str 
 
     try:
         options = [{"id": q["id"], "name": q.get("name", "")} for q in queues]
-        response = _get_openai_client().chat.completions.create(
+        response = _get_openai_client(openai_api_key).chat.completions.create(
             model="gpt-4o-mini",
             temperature=0,
             response_format={"type": "json_object"},
@@ -67,11 +73,11 @@ def choose_handoff_queue(queues: list[dict], reason: str, default_queue_id: str 
         return fallback
 
 
-def generate_free_error_message(agent_name: str) -> str:
+def generate_free_error_message(agent_name: str, openai_api_key: str | None = None) -> str:
     """Usada quando a Mensagem de erro está DESATIVADA na config do agente —
     "a IA pode gerar qualquer resposta" nesse cenário."""
     try:
-        response = _get_openai_client().chat.completions.create(
+        response = _get_openai_client(openai_api_key).chat.completions.create(
             model="gpt-4o-mini",
             temperature=0.5,
             max_tokens=80,

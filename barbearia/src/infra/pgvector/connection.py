@@ -8,10 +8,18 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("URL_PGVECTOR")
 
-embeddings = OpenAIEmbeddings(
-    model="text-embedding-3-small",
-    api_key=os.getenv("OPENAI_API_KEY"),
-)
+# Cacheado por api_key (mesmo padrão do _get_openai_client em agent_api/client.py)
+# — o token normalmente vem do payload da mensagem (Agent Console, por agente),
+# com fallback pro env quando o agente ainda não tem um configurado.
+_embeddings_cache: dict[str | None, OpenAIEmbeddings] = {}
+
+
+def get_embeddings(api_key: str | None = None) -> OpenAIEmbeddings:
+    key = api_key or os.getenv("OPENAI_API_KEY")
+    if key not in _embeddings_cache:
+        _embeddings_cache[key] = OpenAIEmbeddings(model="text-embedding-3-small", api_key=key)
+    return _embeddings_cache[key]
+
 
 # Coleção única compartilhada por TODOS os agentes genéricos (diferente do
 # atlas, que tem uma coleção por agente) — como o mesmo processo "max" atende
@@ -22,9 +30,9 @@ embeddings = OpenAIEmbeddings(
 GENERIC_AGENTS_COLLECTION = "documentos_agentes_generic"
 
 
-def get_vector_store(collection_name: str = GENERIC_AGENTS_COLLECTION) -> PGVector:
+def get_vector_store(collection_name: str = GENERIC_AGENTS_COLLECTION, api_key: str | None = None) -> PGVector:
     return PGVector(
-        embeddings=embeddings,
+        embeddings=get_embeddings(api_key),
         collection_name=collection_name,
         connection=DATABASE_URL,
         use_jsonb=True,

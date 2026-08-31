@@ -172,16 +172,18 @@ def _build_known_data_block(target_info: dict) -> str:
     return "\n".join(linhas)
 
 
-def _build_rag_tool(agent_id: str):
-    """A tool de RAG é montada como closure (capturando agent_id) em vez de uma
-    função de módulo fixa — como o worker atende agentes/organizações
-    diferentes através da mesma fila genérica, não existe um agent_id fixo
-    pra hardcodar num tools.py estático."""
+def _build_rag_tool(agent_id: str, openai_api_key: str | None):
+    """A tool de RAG é montada como closure (capturando agent_id/openai_api_key)
+    em vez de uma função de módulo fixa — como o worker atende agentes/
+    organizações diferentes através da mesma fila genérica, não existe um
+    agent_id fixo pra hardcodar num tools.py estático. openai_api_key vem do
+    Agent Console (token por agente, criptografado no banco); None cai no
+    fallback do env em get_embeddings (ver infra/pgvector/connection.py)."""
 
     async def consultar_conhecimento(tool_context: ToolContext, pergunta: str) -> dict:
         """Busca na base de conhecimento anexada a este agente informações
         relevantes pra responder à pergunta do cliente."""
-        contexto = await consultar_base_de_conhecimento(pergunta, agent_id)
+        contexto = await consultar_base_de_conhecimento(pergunta, agent_id, openai_api_key)
         if not contexto:
             return {"contexto": "", "aviso": "Nada relevante encontrado na base de conhecimento."}
         return {"contexto": contexto}
@@ -224,7 +226,7 @@ def build_agent(agent_info: dict, target_info: dict | None = None) -> Agent:
         encerrar_conversa,
     ]
     if rag_enabled:
-        tools.append(_build_rag_tool(agent_info["id"]))
+        tools.append(_build_rag_tool(agent_info["id"], agent_info.get("openaiToken")))
 
     return Agent(
         # Nome interno do ADK — fixo, não é o nome de exibição do agente (que

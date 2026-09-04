@@ -34,7 +34,7 @@ WORKDIR /app
 # Copia o código da aplicação (.dockerignore evita levar .venv, .env, __pycache__ etc.)
 COPY . .
 
-EXPOSE 7084
+EXPOSE 7097
 
 # worker.py sobe o HTTP (healthcheck + POST /rag/ingest, porta PORT) e consome
 # a fila do agente definido pela env AGENT_NAME (task.agent.<nome>.create) —

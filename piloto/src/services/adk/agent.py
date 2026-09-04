@@ -179,7 +179,8 @@ def build_agent(agent_info: dict, target_info: dict | None = None) -> Agent:
     ragEnabled) e target_info (nome/histórico já conhecidos), que vêm
     frescos no payload de cada mensagem da fila."""
     target_info = target_info or {}
-    nome = agent_info.get("name") or "piloto"
+    # nome = agent_info.get("name") or "piloto"
+    nome = "Fly" # Esta manual para testes
     personality = (agent_info.get("personality") or "").strip()
     rag_enabled = bool(agent_info.get("ragEnabled"))
 
@@ -220,7 +221,7 @@ def build_agent(agent_info: dict, target_info: dict | None = None) -> Agent:
         # exibição só entra na instrução (`nome` acima).
         name="recepcionista_agent",
         model=os.getenv("GOOGLE_ADK_MODEL", "gemini-flash-latest"),
-        description=f"{nome}, recepcionista virtual via WhatsApp.",
+        description=f"Fly recepcionista virtual via WhatsApp.",
         instruction=instruction,
         tools=tools,
     )

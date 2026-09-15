@@ -13,7 +13,7 @@ agrupado/debounced por sessão em janelas de 10s):
 
 {
   "target": {"id", "waId", "name", "metadata"},
-  "whatsappChannel": {"id", "phoneNumberId", "wabaId", "serviceIslandId"},
+  "channel": {"id", "phoneNumberId", "wabaId", "serviceIslandId", "wordsToReset", "resetMessage"},
   "agent": {
     "id", "name", "defaultQueueId",
     "processingMessage",           # não usado aqui — enviado pelo Inbound-Service
@@ -37,13 +37,18 @@ import os
 import re
 import traceback
 
-from main import gerar_resposta
-from src.infra.agent_api.client import choose_handoff_queue, generate_free_error_message, get_service_island_queues
+from main import gerar_resposta, resetar_jornada
+from src.infra.agent_api.client import choose_handoff_queue, generate_free_error_message, get_service_island_queues, normalize_text
 from src.infra.rabbitmq.connection import RabbitMQ
 from src.services.queue.publisher import (
     QUEUE_DESK_TICKET_CREATE,
     publish_desk_ticket_create,
     publish_outbound_message,
+)
+
+RESET_CONFIRMATION_MESSAGE = (
+    "Prontinho! Reiniciei nossa conversa e apaguei os dados que eu tinha guardado sobre você. "
+    "Pode começar de novo quando quiser."
 )
 
 
@@ -78,7 +83,7 @@ def _log(payload: dict, msg: str) -> None:
 def _base_outbound_payload(payload: dict) -> dict:
     return {
         "target": payload.get("target"),
-        "whatsappChannel": payload.get("whatsappChannel"),
+        "channel": payload.get("channel"),
         "messagingSession": payload.get("messagingSession"),
         "origin": "AI",
     }
@@ -107,8 +112,31 @@ def _handle_generation_error(channel, payload: dict, agent: dict, error: Excepti
     publish_outbound_message(channel, outbound)
 
 
+def _is_reset_keyword(pergunta: str, whatsapp_channel: dict) -> bool:
+    """Determinístico, roda ANTES do LLM — a mensagem do contato precisa
+    bater EXATAMENTE (normalizada, sem acento/maiúscula/pontuação) com uma
+    das palavras-chave configuradas no canal (Channel.wordsToReset),
+    pra não disparar reset por engano numa frase que só contenha a palavra."""
+    palavras = whatsapp_channel.get("wordsToReset") or []
+    if not palavras:
+        return False
+    pergunta_normalizada = normalize_text(pergunta)
+    return any(pergunta_normalizada == normalize_text(p) for p in palavras)
+
+
+def _handle_reset_journey(channel, payload: dict, target: dict, whatsapp_channel: dict) -> None:
+    sessoes_apagadas = resetar_jornada(target)
+    _log(payload, f"reset de jornada: {sessoes_apagadas} sessao(oes) ADK apagada(s) + metadados limpos")
+
+    mensagem = whatsapp_channel.get("resetMessage") or RESET_CONFIRMATION_MESSAGE
+    outbound = _base_outbound_payload(payload)
+    outbound["answer"] = {"text": mensagem, "audio": "", "image": ""}
+    outbound["finishesProcessing"] = True
+    publish_outbound_message(channel, outbound)
+
+
 def _handle_handoff(channel, payload: dict, agent: dict, reason: str | None, suggested_queue: str | None = None) -> None:
-    whatsapp_channel = payload.get("whatsappChannel") or {}
+    whatsapp_channel = payload.get("channel") or {}
     service_island_id = whatsapp_channel.get("serviceIslandId")
     
     _log(payload, f"handoff solicitado, motivo='{reason}' fila_sugerida='{suggested_queue}' ilha={service_island_id}")
@@ -159,6 +187,15 @@ def _on_message(channel, method, properties, body):
         # Mensagens agrupadas viram uma única pergunta, respeitando a ordem de
         # recebimento (regra de agrupamento do Inbound-Service).
         pergunta = "\n".join(m.get("text", "") for m in messages).strip()
+
+        whatsapp_channel = payload.get("channel") or {}
+        if _is_reset_keyword(pergunta, whatsapp_channel):
+            _log(payload, f"pergunta='{pergunta[:200]}' bateu com palavra-chave de reset -> resetando jornada")
+            _handle_reset_journey(channel, payload, target, whatsapp_channel)
+            channel.basic_ack(delivery_tag=method.delivery_tag)
+            _log(payload, "ACK (reset de jornada)")
+            return
+
         _log(payload, f"pergunta='{pergunta[:200]}' -> chamando ADK")
 
         try:

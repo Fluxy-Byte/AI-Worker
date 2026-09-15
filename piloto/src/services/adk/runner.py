@@ -6,7 +6,7 @@ from google.adk.runners import Runner
 from google.genai import types
 from src.services.adk.infos import CHAVES_METADATA, APP_NAME
 from src.infra.adk.session_service import get_session_service
-from src.infra.agent_api.client import sincronizar_metadados_contato
+from src.infra.agent_api.client import bloquear_campanhas_contato, resetar_metadados_contato, sincronizar_metadados_contato
 from src.services.adk.agent import build_agent
 
 
@@ -89,6 +89,10 @@ async def _executar(pergunta: str, user_id: str, session_id: str, agent_config: 
             handoff_reason = sessao_final.state.get("handoff_reason")
             handoff_suggested_queue = sessao_final.state.get("handoff_suggested_queue")
             closing_requested = bool(sessao_final.state.get("closing_requested"))
+            block_campaigns_requested = bool(sessao_final.state.get("block_campaigns_requested"))
+
+            if block_campaigns_requested:
+                bloquear_campanhas_contato(user_id)
 
             print(
                 f"[session={session_id} user={user_id}] state final: "
@@ -130,6 +134,25 @@ async def _executar(pergunta: str, user_id: str, session_id: str, agent_config: 
             handoff_reason=handoff_reason,
             handoff_suggested_queue=handoff_suggested_queue,
         )
+
+
+async def _resetar_jornada(user_id: str) -> int:
+    async with get_session_service() as session_service:
+        resposta = await session_service.list_sessions(app_name=APP_NAME, user_id=user_id)
+        for sessao in resposta.sessions:
+            await session_service.delete_session(app_name=APP_NAME, user_id=user_id, session_id=sessao.id)
+        return len(resposta.sessions)
+
+
+def resetar_jornada_contato(user_id: str) -> int:
+    """Apaga TODAS as sessões do ADK deste contato (não só a da janela de 24h
+    atual) e os metadados salvos dele no Agent-Api — chamada pelo consumer
+    ANTES de acionar o LLM, quando a mensagem bate com uma palavra-chave de
+    reset (WhatsappChannel.wordsToReset). Determinístico de propósito: não
+    depende de nenhuma tool que o modelo poderia esquecer de chamar."""
+    sessoes_apagadas = asyncio.run(_resetar_jornada(user_id))
+    resetar_metadados_contato(user_id)
+    return sessoes_apagadas
 
 
 def gerar_resposta_adk(pergunta: str, user_id: str, session_id: str, agent_config: dict, target_info: dict) -> ResultadoResposta:

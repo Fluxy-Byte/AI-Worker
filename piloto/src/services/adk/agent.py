@@ -11,6 +11,7 @@ from src.services.adk.tools import (
     atualizar_nome_cliente,
     atualizar_quantidade_funcionarios_cliente,
     encerrar_conversa,
+    parar_envio_campanhas,
     registrar_disponibilidade_contato,
     solicitar_atendimento_humano,
 )
@@ -44,6 +45,9 @@ você não tenha certeza.
   segurança.
 - encerrar_conversa: chame quando o contato se despedir, confirmar que não
   precisa de mais nada, ou logo depois de encaminhar o atendimento humano.
+- parar_envio_campanhas: chame assim que o contato pedir explicitamente para
+  não receber mais campanhas/mensagens em massa (ex: "não quero mais
+  receber", "pare de me mandar mensagem", "me remova da lista").
 """
 
 RAG_INSTRUCTION = """
@@ -210,6 +214,7 @@ def build_agent(agent_info: dict, target_info: dict | None = None) -> Agent:
         registrar_disponibilidade_contato,
         solicitar_atendimento_humano,
         encerrar_conversa,
+        parar_envio_campanhas,
     ]
 
     if rag_enabled:

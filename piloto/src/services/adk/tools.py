@@ -65,6 +65,15 @@ def atualizar_quantidade_funcionarios_cliente(
     return {"quantidade_de_funcionarios": quantidade_de_funcionarios}
 
 
+def parar_envio_campanhas(tool_context: ToolContext) -> dict:
+    """Chame assim que o contato pedir explicitamente para não receber mais
+    campanhas/mensagens em massa (ex: "não quero mais receber", "pare de me
+    mandar mensagem", "me remova da lista") — marca o contato para ser
+    excluído dos próximos disparos de campanha."""
+    tool_context.state["block_campaigns_requested"] = True
+    return {"ok": True, "mensagem": "Contato marcado para não receber mais campanhas."}
+
+
 def registrar_disponibilidade_contato(tool_context: ToolContext, dia: str, horario: str) -> dict:
     """Registra o melhor dia e horário que o cliente informou para vocês
     conversarem — chame assim que ele responder isso, no roteiro de primeiro

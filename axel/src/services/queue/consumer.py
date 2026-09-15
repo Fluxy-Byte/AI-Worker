@@ -6,7 +6,7 @@ agrupado/debounced por sessão em janelas de 10s):
 
 {
   "target": {"id", "waId", "name", "metadata"},
-  "whatsappChannel": {"id", "phoneNumberId", "wabaId", "serviceIslandId"},
+  "channel": {"id", "phoneNumberId", "wabaId", "serviceIslandId"},
   "agent": {
     "id", "name", "defaultQueueId",
     "processingMessage",           # não usado aqui — enviado pelo Inbound-Service
@@ -45,7 +45,7 @@ DLQ = f"{QUEUE}.dlq"
 def _base_outbound_payload(payload: dict) -> dict:
     return {
         "target": payload.get("target"),
-        "whatsappChannel": payload.get("whatsappChannel"),
+        "channel": payload.get("channel"),
         "messagingSession": payload.get("messagingSession"),
         "origin": "AI",
     }
@@ -73,7 +73,7 @@ def _handle_generation_error(channel, payload: dict, agent: dict, error: Excepti
 
 
 def _handle_handoff(channel, payload: dict, agent: dict, reason: str | None) -> None:
-    whatsapp_channel = payload.get("whatsappChannel") or {}
+    whatsapp_channel = payload.get("channel") or {}
     service_island_id = whatsapp_channel.get("serviceIslandId")
 
     queues: list[dict] = []

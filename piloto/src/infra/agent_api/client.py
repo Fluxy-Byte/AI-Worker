@@ -9,11 +9,14 @@ BASE_URL = os.getenv("AGENT_API_BASE_URL", "http://localhost:7073")
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 
 
-def _normalize(text: str) -> str:
+def normalize_text(text: str) -> str:
     """minúsculas, sem acento, só alfanumérico — pra casar 'Goioerê' com
     'Goioere', ou 'Venda de Novos — Toledo' com 'Venda de novos Toledo'."""
     sem_acento = "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
     return "".join(ch for ch in sem_acento.lower() if ch.isalnum())
+
+
+_normalize = normalize_text
 
 # Cacheado por api_key (não um singleton fixo) — cada instância deste worker
 # atende só um agente, então normalmente há só 1 entrada, mas cachear por key
@@ -145,6 +148,36 @@ def sincronizar_metadados_contato(target_id: str, metadata: dict) -> None:
         )
     except Exception as e:
         print(f"[julia] Falha ao sincronizar metadados do contato {target_id}: {e}")
+
+
+def resetar_metadados_contato(target_id: str) -> None:
+    """Apaga TODOS os metadados salvos do contato (Target.metadata = {}) —
+    usado no reset de jornada por palavra-chave (ver consumer.py). Diferente
+    de sincronizar_metadados_contato, que faz merge: aqui substitui por
+    vazio. Best-effort: uma falha aqui não deve impedir a resposta de
+    confirmação do reset."""
+    try:
+        httpx.delete(
+            f"{BASE_URL}/internal/targets/{target_id}/metadata",
+            headers={"x-internal-api-key": INTERNAL_API_KEY},
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[julia] Falha ao resetar metadados do contato {target_id}: {e}")
+
+
+def bloquear_campanhas_contato(target_id: str) -> None:
+    """Avisa o Agent-Api que este contato pediu pra não receber mais campanhas
+    (Target.blockCampaigns = true), pra excluí-lo dos próximos disparos.
+    Best-effort: uma falha aqui não deve derrubar a conversa."""
+    try:
+        httpx.patch(
+            f"{BASE_URL}/internal/targets/{target_id}/block-campaigns",
+            headers={"x-internal-api-key": INTERNAL_API_KEY},
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[julia] Falha ao bloquear campanhas do contato {target_id}: {e}")
 
 
 def update_rag_document_status(

@@ -38,7 +38,13 @@ import re
 import traceback
 
 from main import gerar_resposta, resetar_jornada
-from src.infra.agent_api.client import choose_handoff_queue, generate_free_error_message, get_service_island_queues, normalize_text
+from src.infra.agent_api.client import (
+    choose_handoff_queue,
+    generate_free_error_message,
+    get_service_island_queues,
+    normalize_text,
+    record_message_logs,
+)
 from src.infra.rabbitmq.connection import RabbitMQ
 from src.services.queue.publisher import (
     QUEUE_DESK_TICKET_CREATE,
@@ -89,12 +95,27 @@ def _base_outbound_payload(payload: dict) -> dict:
     }
 
 
+def _message_log_ids(payload: dict) -> list[str]:
+    """mongoMessageId é o id preferido (mensagem já salva no Mongo pelo
+    Inbound-Service); cai pro externalMessageId só se vier ausente."""
+    messages = payload.get("messages") or []
+    return [m.get("mongoMessageId") or m.get("externalMessageId") for m in messages if m.get("mongoMessageId") or m.get("externalMessageId")]
+
+
+def _log_message_stage(payload: dict, stagio: str) -> None:
+    ids = _message_log_ids(payload)
+    if not ids:
+        return
+    record_message_logs([{"messageId": mid, "messageLog": f"AI Worker - {_RAW_AGENT_NAME}", "stagio": stagio} for mid in ids])
+
+
 def _handle_unsupported_format(channel, payload: dict, agent: dict) -> None:
     _log(payload, "formato nao suportado -> outbound com unsupportedFormatMessage")
     outbound = _base_outbound_payload(payload)
     outbound["answer"] = {"text": agent.get("unsupportedFormatMessage", ""), "audio": "", "image": ""}
     outbound["finishesProcessing"] = True
     publish_outbound_message(channel, outbound)
+    _log_message_stage(payload, "end")
 
 
 def _handle_generation_error(channel, payload: dict, agent: dict, error: Exception) -> None:
@@ -110,6 +131,7 @@ def _handle_generation_error(channel, payload: dict, agent: dict, error: Excepti
     outbound["answer"] = {"text": text, "audio": "", "image": ""}
     outbound["finishesProcessing"] = True
     publish_outbound_message(channel, outbound)
+    _log_message_stage(payload, "end")
 
 
 def _is_reset_keyword(pergunta: str, whatsapp_channel: dict) -> bool:
@@ -133,6 +155,7 @@ def _handle_reset_journey(channel, payload: dict, target: dict, whatsapp_channel
     outbound["answer"] = {"text": mensagem, "audio": "", "image": ""}
     outbound["finishesProcessing"] = True
     publish_outbound_message(channel, outbound)
+    _log_message_stage(payload, "end")
 
 
 def _handle_handoff(channel, payload: dict, agent: dict, reason: str | None, suggested_queue: str | None = None) -> None:
@@ -160,6 +183,7 @@ def _handle_handoff(channel, payload: dict, agent: dict, reason: str | None, sug
     desk_payload["handoffReason"] = reason
 
     publish_desk_ticket_create(channel, desk_payload)
+    _log_message_stage(payload, "end")
 
 
 def _on_message(channel, method, properties, body):
@@ -170,6 +194,8 @@ def _on_message(channel, method, properties, body):
         messages = payload.get("messages") or []
         target = payload.get("target") or {}
         messaging_session = payload.get("messagingSession") or {}
+
+        _log_message_stage(payload, "start")
 
         _log(
             payload,
@@ -224,6 +250,7 @@ def _on_message(channel, method, properties, body):
         outbound["answer"] = {"text": resultado.texto or "", "audio": "", "image": ""}
         outbound["finishesProcessing"] = True
         publish_outbound_message(channel, outbound)
+        _log_message_stage(payload, "end")
 
         channel.basic_ack(delivery_tag=method.delivery_tag)
         _log(payload, "ACK (resposta normal publicada em outbound.message.send)")

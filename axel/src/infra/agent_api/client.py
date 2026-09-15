@@ -73,6 +73,26 @@ def choose_handoff_queue(
         return fallback
 
 
+def record_message_logs(logs: list[dict]) -> None:
+    """Grava linhas de MessageLog (rastreamento de uma mensagem passando pelos
+    serviços da mensageria — ver Agent-Api/prisma/schema.prisma e
+    MENSAGERIA.md). AI-Worker não tem acesso direto ao Postgres, por isso
+    passa pelo Agent-Api em vez de escrever com Prisma como os demais
+    serviços. Best-effort: uma falha aqui nunca pode derrubar o
+    processamento da mensagem."""
+    if not logs:
+        return
+    try:
+        httpx.post(
+            f"{BASE_URL}/internal/message-logs",
+            json={"logs": logs},
+            headers={"x-internal-api-key": INTERNAL_API_KEY},
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[axel] Falha ao gravar MessageLog: {e}")
+
+
 def generate_free_error_message(agent_name: str, openai_api_key: str | None = None) -> str:
     """Usada quando a Mensagem de erro está DESATIVADA na config do agente —
     "a IA pode gerar qualquer resposta" nesse cenário."""

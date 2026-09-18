@@ -129,6 +129,22 @@ def _handle_generation_error(channel, payload: dict, agent: dict, error: Excepti
     outbound["answer"] = {"text": text, "audio": "", "image": ""}
     outbound["finishesProcessing"] = True
     publish_outbound_message(channel, outbound)
+
+    # Já na primeira falha técnica (ex: provedor de IA indisponível) manda
+    # direto pra fila padrão do número, sem esperar o cliente insistir e sem
+    # tentar classificar por IA qual fila é a certa — não faz sentido
+    # depender de mais uma chamada externa bem na hora em que uma já falhou.
+    default_queue_id = agent.get("defaultQueueId")
+    if default_queue_id:
+        _log(payload, f"falha tecnica -> handoff automatico pra fila padrao, queueId={default_queue_id}")
+        desk_payload = _base_outbound_payload(payload)
+        desk_payload["agent"] = {"id": agent.get("id"), "name": agent.get("name")}
+        desk_payload["queueId"] = default_queue_id
+        desk_payload["handoffReason"] = f"Falha técnica ao gerar resposta com IA: {error}"
+        publish_desk_ticket_create(channel, desk_payload)
+    else:
+        _log(payload, "falha tecnica -> sem defaultQueueId configurado no agente, sem handoff automatico")
+
     _log_message_stage(payload, "end")
 
 

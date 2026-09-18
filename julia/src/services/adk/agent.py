@@ -233,7 +233,7 @@ def build_agent(agent_info: dict, target_info: dict | None = None) -> Agent:
         # pode ter espaços/acentos, ex: "Assistente Virtual"). O nome de
         # exibição só entra na instrução (`nome` acima).
         name="julia_agent",
-        model=os.getenv("GOOGLE_ADK_MODEL", "gemini-flash-latest"),
+        model=os.getenv("GOOGLE_ADK_MODEL", "gemini-3.8-flash"),
         description=f"{nome}, assistente de vendas da Derm'Attive Cosméticos via WhatsApp.",
         instruction=instruction,
         tools=tools,

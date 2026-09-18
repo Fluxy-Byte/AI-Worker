@@ -233,7 +233,7 @@ def build_agent(agent_info: dict, conta: ContaFluxy) -> Agent:
         # pode ter espaços/acentos). O nome de exibição só entra na instrução
         # (`nome` acima).
         name="fly_agent",
-        model=os.getenv("GOOGLE_ADK_MODEL", "gemini-flash-latest"),
+        model=os.getenv("GOOGLE_ADK_MODEL", "gemini-3.8-flash"),
         description=f"{nome}, assistente da Fluxy Gestão via WhatsApp.",
         instruction=instruction,
         tools=tools,

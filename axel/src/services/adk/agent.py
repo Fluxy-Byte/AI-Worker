@@ -108,7 +108,7 @@ despedir ou confirmar que não precisa de mais nada, se despeça e chame encerra
 
 root_agent = Agent(
     name="axel",
-    model=os.getenv("GOOGLE_ADK_MODEL", "gemini-flash-latest"),
+    model=os.getenv("GOOGLE_ADK_MODEL", "gemini-3.8-flash"),
     description="Axel, consultor comercial de imóveis.",
     instruction=_build_instruction,
     tools=[

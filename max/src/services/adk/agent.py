@@ -140,7 +140,7 @@ def build_agent(agent_info: dict, target_info: dict | None = None) -> Agent:
     return Agent(
         # Nome interno do ADK — fixo, não é o nome de exibição do agente.
         name="max_metropole",
-        model=os.getenv("GOOGLE_ADK_MODEL", "gemini-flash-latest"),
+        model=os.getenv("GOOGLE_ADK_MODEL", "gemini-3.8-flash"),
         description=f"{nome_exibicao}, consultor de vendas imobiliário da Metrópole.",
         instruction=instruction,
         tools=[

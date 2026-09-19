@@ -1,9 +1,7 @@
-import os
-
 from google.adk.agents import Agent
 from google.adk.tools import ToolContext
 
-from src.services.adk.infos import CHAVES_METADATA
+from src.services.adk.infos import CHAVES_METADATA, GOOGLE_ADK_MODEL
 from src.services.adk.rag_graph import consultar_base_de_conhecimento
 from src.services.adk.tools import (
     atualizar_cargo_cliente,
@@ -225,7 +223,7 @@ def build_agent(agent_info: dict, target_info: dict | None = None) -> Agent:
         # pode ter espaços/acentos, ex: "Assistente Virtual"). O nome de
         # exibição só entra na instrução (`nome` acima).
         name="recepcionista_agent",
-        model=os.getenv("GOOGLE_ADK_MODEL", "gemini-3.8-flash"),
+        model=GOOGLE_ADK_MODEL,
         description=f"Fly recepcionista virtual via WhatsApp.",
         instruction=instruction,
         tools=tools,

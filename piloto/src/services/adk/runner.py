@@ -4,7 +4,7 @@ import os
 from google.adk.errors.already_exists_error import AlreadyExistsError
 from google.adk.runners import Runner
 from google.genai import types
-from src.services.adk.infos import CHAVES_METADATA, APP_NAME
+from src.services.adk.infos import CHAVES_METADATA, APP_NAME, GOOGLE_ADK_MODEL
 from src.infra.adk.session_service import get_session_service
 from src.infra.agent_api.client import bloquear_campanhas_contato, resetar_metadados_contato, sincronizar_metadados_contato
 from src.services.adk.agent import build_agent
@@ -52,7 +52,7 @@ async def _executar(pergunta: str, user_id: str, session_id: str, agent_config: 
         
         print(
             f"[session={session_id} user={user_id}] montando agent "
-            f"'{agent_config.get('name')}' ragEnabled={rag_enabled} "
+            f"'{agent_config.get('name')}' modelo={GOOGLE_ADK_MODEL} ragEnabled={rag_enabled} "
             f"personality_len={len((agent_config.get('personality') or ''))}"
         )
         

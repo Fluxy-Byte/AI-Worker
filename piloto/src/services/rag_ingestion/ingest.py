@@ -46,8 +46,8 @@ def _extract_text(file_bytes: bytes, file_name: str) -> str:
 
 def run_ingestion(payload: dict) -> None:
     """Baixa o documento do S3, extrai o texto, quebra em chunks e grava no
-    pgvector — chamado em background thread pelo handler HTTP de
-    POST /rag/ingest (ver infra/health/server.py). Sempre avisa o Agent-Api do
+    pgvector — chamado em background thread pelo consumidor da fila
+    task.agent.<nome>.rag (ver services/queue/consumer.py#_on_rag_ingest). Sempre avisa o Agent-Api do
     resultado (READY/FAILED) ao final, mesmo em erro."""
     rag_document_id = payload["ragDocumentId"]
 

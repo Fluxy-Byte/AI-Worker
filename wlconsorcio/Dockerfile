@@ -36,8 +36,9 @@ COPY . .
 
 EXPOSE 7097
 
-# worker.py sobe o HTTP (healthcheck + POST /rag/ingest, porta PORT) e consome
-# a fila do agente definido pela env AGENT_NAME (task.agent.<nome>.create) —
+# worker.py sobe o HTTP (healthcheck, porta PORT) e consome
+# as filas do agente definido pela env AGENT_NAME (task.agent.<nome>.create e
+# task.agent.<nome>.rag, ingestão de RAG) —
 # uma instância desta imagem atende UM agente só, publicando em
 # outbound.message.send ou desk.ticket.create.
 CMD ["python", "worker.py"]

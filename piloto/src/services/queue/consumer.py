@@ -35,6 +35,7 @@ suportado) ou `desk.ticket.create` (handoff para atendimento humano).
 import json
 import os
 import re
+import threading
 import traceback
 
 from main import gerar_resposta, resetar_jornada
@@ -75,6 +76,11 @@ if not _RAW_AGENT_NAME:
 AGENT_NAME = _sanitize_agent_name(_RAW_AGENT_NAME)
 QUEUE = f"task.agent.{AGENT_NAME}.create"
 DLQ = f"{QUEUE}.dlq"
+# Ingestão de RAG dos documentos DESTE agente — publicada pelo Agent-Api
+# (rag-ingest-publisher.ts#resolveAgentRagQueueName) quando alguém anexa um
+# arquivo na aba RAG do agente no Agent Console.
+RAG_QUEUE = f"task.agent.{AGENT_NAME}.rag"
+RAG_DLQ = f"{RAG_QUEUE}.dlq"
 
 
 def _log(payload: dict, msg: str) -> None:
@@ -260,22 +266,53 @@ def _on_message(channel, method, properties, body):
         channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 
+def _on_rag_ingest(channel, method, properties, body):
+    """Ingestão roda numa thread (extração/embedding pode levar minutos e
+    travaria o consumo de mensagens do agente) e o ACK sai na hora — o
+    resultado (READY/FAILED) sempre volta pro Agent-Api via
+    PATCH /internal/rag-documents/:id/status, mesmo em erro."""
+    try:
+        payload = json.loads(body)
+        required = ("ragDocumentId", "agentId", "organizationId", "s3Key", "fileName", "chunkSize")
+        missing = [field for field in required if field not in payload]
+        if missing:
+            print(f"[rag] payload inválido em {RAG_QUEUE}, campos ausentes: {missing}")
+            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            return
+
+        from src.services.rag_ingestion.ingest import run_ingestion
+
+        print(f"[rag] RECEBIDA de {RAG_QUEUE}: documento {payload['ragDocumentId']} ({payload['fileName']})")
+        threading.Thread(target=run_ingestion, args=(payload,), daemon=True).start()
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+    except Exception as e:
+        print(f"[rag] ERRO ao receber ingestão de {RAG_QUEUE}: {e}")
+        print(traceback.format_exc())
+        channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+
+
+def _declare_queue_with_dlq(channel, queue: str, dlq: str) -> None:
+    channel.queue_declare(queue=dlq, durable=True)
+    channel.queue_declare(
+        queue=queue,
+        durable=True,
+        arguments={
+            "x-dead-letter-exchange": "",
+            "x-dead-letter-routing-key": dlq,
+        },
+    )
+
+
 def start_consumer() -> None:
     rabbitmq = RabbitMQ()
     channel = rabbitmq.connect()
 
-    channel.queue_declare(queue=DLQ, durable=True)
-    channel.queue_declare(
-        queue=QUEUE,
-        durable=True,
-        arguments={
-            "x-dead-letter-exchange": "",
-            "x-dead-letter-routing-key": DLQ,
-        },
-    )
+    _declare_queue_with_dlq(channel, QUEUE, DLQ)
+    _declare_queue_with_dlq(channel, RAG_QUEUE, RAG_DLQ)
 
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(queue=QUEUE, on_message_callback=_on_message)
+    channel.basic_consume(queue=RAG_QUEUE, on_message_callback=_on_rag_ingest)
 
-    print(f"Aguardando mensagens na fila {QUEUE}")
+    print(f"Aguardando mensagens na fila {QUEUE} e ingestões de RAG na fila {RAG_QUEUE}")
     channel.start_consuming()
